@@ -1868,4 +1868,41 @@ describe('Bulk', function() {
       }
     });
   });
+
+  describe('with `promoteLongs=false` BSON options', function() {
+    it('should still correctly perform bulk operations', {
+      metadata: { requires: { mongodb: '>= 4.2', topology: ['replicaset'] } },
+      test() {
+        const DOCUMENTS = new Array(5000).fill(null).map((_, _id) => ({ _id }));
+        return this.configuration
+          .newClient('mongodb://localhost:27017', {
+            useUnifiedTopology: true,
+            promoteValues: true,
+            promoteLongs: false,
+            directConnection: true,
+            maxPoolSize: 30,
+            minPoolSize: 2
+          })
+          .connect()
+          .then(client => {
+            const collection = client.db().collection('testBsonOptionsWithBulk');
+
+            const session = client.startSession();
+
+            return session
+              .withTransaction(() => {
+                return collection
+                  .deleteMany({ _id: { $type: 'int' } })
+                  .then(res => {
+                    expect(res).to.exist;
+                    return collection.insertMany(DOCUMENTS);
+                  })
+                  .then(res => expect(res).to.exist);
+              })
+              .then(() => session.endSession())
+              .then(() => client.close());
+          });
+      }
+    });
+  });
 });
